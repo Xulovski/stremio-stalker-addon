@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Stalker IPTV – Configuração</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <style>
+    body {
+      background: #0f172a;
+      color: #e5e7eb;
+      font-family: Arial, sans-serif;
+      padding: 16px;
+    }
+    h1 {
+      color: #38bdf8;
+      font-size: 20px;
+    }
+    .portal {
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    input {
+      width: 100%;
+      padding: 8px;
+      margin: 6px 0;
+      border-radius: 4px;
+      border: none;
+    }
+    button {
+      background: #38bdf8;
+      border: none;
+      border-radius: 6px;
+      padding: 10px;
+      margin-top: 8px;
+      font-weight: bold;
+      width: 100%;
+      cursor: pointer;
+    }
+    .danger {
+      background: #ef4444;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Stalker IPTV</h1>
+<p>Adicionar portais Stalker (MAG / MAC)</p>
+
+<div id="portals"></div>
+
+<button onclick="addPortal()">➕ Adicionar Portal</button>
+<button onclick="saveConfig()">💾 Guardar Configuração</button>
+
+<script>
+let portals = []
+
+function addPortal(data = {}) {
+  const id = Date.now()
+  portals.push(id)
+
+  const div = document.createElement('div')
+  div.className = 'portal'
+  div.id = id
+  div.innerHTML = `
+    <input placeholder="Nome do portal" value="${data.name || ''}">
+    <input placeholder="URL do portal (http://...)" value="${data.url || ''}">
+    <input placeholder="MAC (00:1A:79:XX:XX:XX)" value="${data.mac || ''}">
+    <button class="danger" onclick="removePortal(${id})">Remover</button>
+  `
+  document.getElementById('portals').appendChild(div)
+}
+
+function removePortal(id) {
+  document.getElementById(id).remove()
+  portals = portals.filter(p => p !== id)
+}
+
+function saveConfig() {
+  const result = []
+
+  portals.forEach(id => {
+    const inputs = document.querySelectorAll(`#${id} input`)
+    if (!inputs[1].value || !inputs[2].value) return
+
+    result.push({
+      name: inputs[0].value,
+      url: inputs[1].value,
+      mac: inputs[2].value
+    })
+  })
+
+  window.parent.postMessage({
+    type: 'stremio-addon-config',
+    config: { portals: result }
+  }, '*')
+
+  alert('Configuração enviada ao Stremio')
+}
+</script>
+
+</body>
+</html>

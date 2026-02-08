@@ -1,0 +1,36 @@
+{
+  "id": "org.xulovski.stremio.stalker",
+  "version": "1.0.0",
+  "name": "Stalker IPTV (Multi-Portal)",
+  "description": "Addon Stremio para portais Stalker (MAG / IPTV) com suporte a múltiplas listas por utilizador.",
+  "logo": "https://raw.githubusercontent.com/SEU_USER/SEU_REPO/main/public/assets/logo.png",
+  "background": "https://raw.githubusercontent.com/SEU_USER/SEU_REPO/main/public/assets/background.png",
+
+  "types": ["tv", "movie", "series"],
+
+  "resources": [
+    "catalog",
+    "meta",
+    "stream"
+  ],
+
+  "catalogs": [
+    {
+      "type": "tv",
+      "id": "stalker_tv",
+      "name": "Stalker TV",
+      "extra": [
+        { "name": "search", "isRequired": false }
+      ]
+    }
+  ],
+
+  "idPrefixes": [
+    "stalker:"
+  ],
+
+  "behaviorHints": {
+    "configurable": true,
+    "configurationRequired": true
+  }
+}
