@@ -18,17 +18,17 @@ app.get("/configure", (req, res) => {
     <!DOCTYPE html>
     <html>
     <head>
-      <meta charset="utf-8">
       <title>Configurar Stalker IPTV</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1">
     </head>
     <body>
       <h2>Configurar Stalker IPTV</h2>
 
-      <form method="POST" action="/configure">
-        <label>Portal URL</label><br>
+      <form method="GET" action="/manifest.json">
+        <label>Portal URL:</label><br>
         <input name="portal" required><br><br>
 
-        <label>MAC Address</label><br>
+        <label>MAC Address:</label><br>
         <input name="mac" required><br><br>
 
         <button type="submit">Guardar e Instalar</button>
@@ -67,17 +67,12 @@ app.post("/configure", (req, res) => {
 app.get("/manifest.json", (req, res) => {
   const { portal, mac } = req.query
 
-  if (!portal || !mac) {
-    return res.status(400).json({
-      error: "Missing portal or mac"
-    })
-  }
-
-  res.json({
+  // Manifest BASE (sem configuração)
+  const manifest = {
     id: "org.xulovski.stremio.stalker",
     version: "1.0.0",
     name: "Stalker IPTV (Multi-Portal)",
-    description: `Portal: ${portal}`,
+    description: "Addon Stremio para Stalker IPTV",
     types: ["tv"],
     resources: ["catalog", "stream"],
     catalogs: [
@@ -88,7 +83,22 @@ app.get("/manifest.json", (req, res) => {
       }
     ],
     behaviorHints: {
-      configurable: false,
+      configurable: true,
+      configurationRequired: true
+    }
+  }
+
+  // 👉 Se AINDA NÃO houver config
+  if (!portal || !mac) {
+    return res.json(manifest)
+  }
+
+  // 👉 Se JÁ houver config (depois do Guardar e Instalar)
+  return res.json({
+    ...manifest,
+    description: `Portal: ${portal}`,
+    behaviorHints: {
+      configurable: true,
       configurationRequired: false
     }
   })
