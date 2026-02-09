@@ -65,11 +65,19 @@ app.post("/configure", (req, res) => {
 ========================= */
 
 app.get("/manifest.json", (req, res) => {
+  const { portal, mac } = req.query
+
+  if (!portal || !mac) {
+    return res.status(400).json({
+      error: "Missing portal or mac"
+    })
+  }
+
   res.json({
     id: "org.xulovski.stremio.stalker",
     version: "1.0.0",
     name: "Stalker IPTV (Multi-Portal)",
-    description: "Addon Stremio para portais Stalker",
+    description: `Portal: ${portal}`,
     types: ["tv"],
     resources: ["catalog", "stream"],
     catalogs: [
@@ -79,10 +87,9 @@ app.get("/manifest.json", (req, res) => {
         name: "Stalker IPTV"
       }
     ],
-    idPrefixes: ["stalker:"],
     behaviorHints: {
       configurable: true,
-      configurationRequired: true
+      configurationRequired: false
     }
   })
 })
