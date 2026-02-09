@@ -69,24 +69,25 @@ app.get("/manifest.json", (req, res) => {
 
   // Manifest BASE (sem configuração)
   const manifest = {
-    id: "org.xulovski.stremio.stalker",
-    version: "1.0.0",
-    name: "Stalker IPTV (Multi-Portal)",
-    description: "Addon Stremio para Stalker IPTV",
-    types: ["tv"],
-    resources: ["catalog", "stream"],
-    catalogs: [
-      {
-        type: "tv",
-        id: "stalker_tv",
-        name: "Stalker IPTV"
-      }
-    ],
-    behaviorHints: {
-      configurable: true,
-      configurationRequired: true
+    {
+  "id": "org.xulovski.stremio.stalker",
+  "version": "1.0.0",
+  "name": "Stalker IPTV (Multi-Portal)",
+  "description": "Addon Stremio para Stalker IPTV",
+  "types": ["tv"],
+  "resources": ["catalog", "stream"],
+  "catalogs": [
+    {
+      "type": "tv",
+      "id": "stalker_tv",
+      "name": "Stalker IPTV"
     }
+  ],
+  "behaviorHints": {
+    "configurable": true,
+    "configurationRequired": true
   }
+}
 
   // 👉 Se AINDA NÃO houver config
   if (!portal || !mac) {
