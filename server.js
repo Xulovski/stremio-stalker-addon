@@ -32,19 +32,27 @@ app.get("/configure", (req, res) => {
 
 /* HANDLE CONFIG */
 app.post("/configure", (req, res) => {
-  const { portal, mac } = req.body;
+  const { portal, mac } = req.body
 
   if (!portal || !mac) {
-    return res.status(400).send("Missing portal or mac");
+    return res.status(400).send("Dados em falta")
   }
 
-  const config = Buffer
-    .from(JSON.stringify({ portal, mac }))
-    .toString("base64");
+  const config = {
+    portals: [
+      { portal, mac }
+    ]
+  }
 
-  const redirect = `stremio://${BASE_URL}/manifest.json?config=${config}`;
-  res.redirect(302, redirect);
-});
+  const encoded = Buffer
+    .from(JSON.stringify(config))
+    .toString("base64")
+
+  const redirectUrl =
+    `stremio://stremio-stalker-addon-1.onrender.com/manifest.json?config=${encoded}`
+
+  res.redirect(302, redirectUrl)
+})
 
 /* MANIFEST */
 app.get("/manifest.json", (req, res) => {
@@ -64,7 +72,7 @@ app.get("/manifest.json", (req, res) => {
     ],
     behaviorHints: {
       configurable: true,
-      configurationRequired: true
+      configurationRequired: false
     }
   });
 });
