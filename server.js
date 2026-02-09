@@ -77,6 +77,41 @@ app.get("/manifest.json", (req, res) => {
   });
 });
 
+app.get("/catalog/:type/:id.json", async (req, res) => {
+  try {
+    if (!req.query.config) {
+      return res.json({ metas: [] })
+    }
+
+    const config = JSON.parse(
+      Buffer.from(req.query.config, "base64").toString()
+    )
+
+    // para já usamos só o primeiro portal
+    const { portal, mac } = config.portals[0]
+
+    console.log("CATALOG →", portal, mac)
+
+    // ⚠️ TESTE (canal fake)
+    res.json({
+      metas: [
+        {
+          id: "stalker:test",
+          type: "tv",
+          name: "Canal Teste",
+          poster: "https://via.placeholder.com/300x450.png?text=Stalker",
+          background: "https://via.placeholder.com/1280x720.png?text=Stalker"
+        }
+      ]
+    })
+
+  } catch (err) {
+    console.error("CATALOG ERROR:", err)
+    res.status(500).json({ metas: [] })
+  }
+})
+
 app.listen(PORT, () => {
-  console.log("Servidor ativo na porta", PORT);
-});
+  console.log("Servidor ativo na porta", PORT)
+})
+
