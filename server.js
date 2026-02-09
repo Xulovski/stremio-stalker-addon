@@ -41,14 +41,22 @@ app.get("/configure", (req, res) => {
 app.post("/configure", (req, res) => {
   const { portal, mac } = req.body
 
-  const config = Buffer
-    .from(JSON.stringify({ portal, mac }))
+  const config = {
+    portal,
+    mac
+  }
+
+  const encoded = Buffer
+    .from(JSON.stringify(config))
     .toString("base64")
 
   const baseUrl = `${req.protocol}://${req.get("host")}`
 
+  const manifestUrl =
+    `${baseUrl}/manifest.json?config=${encoded}`
+
   res.redirect(
-    `stremio://${baseUrl}/manifest.json?config=${config}`
+    `stremio://addon/${encodeURIComponent(manifestUrl)}`
   )
 })
 
