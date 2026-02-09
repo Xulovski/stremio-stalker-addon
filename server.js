@@ -79,6 +79,7 @@ app.get("/manifest.json", (req, res) => {
         name: "Stalker IPTV"
       }
     ],
+    idPrefixes: ["stalker:"],
     behaviorHints: {
       configurable: true,
       configurationRequired: true
