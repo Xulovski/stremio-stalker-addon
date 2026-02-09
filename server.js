@@ -88,7 +88,7 @@ app.get("/manifest.json", (req, res) => {
       }
     ],
     behaviorHints: {
-      configurable: true,
+      configurable: false,
       configurationRequired: false
     }
   })
