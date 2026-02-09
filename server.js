@@ -1,3 +1,51 @@
+function normalizeStalkerUrl(input) {
+  let url = input.trim()
+
+  // remove barras finais
+  url = url.replace(/\/+$/, "")
+
+  if (url.includes("load.php")) {
+    return url
+  }
+
+  if (url.includes("portal.php")) {
+    return url
+  }
+
+  if (url.endsWith("/c")) {
+    return url.replace(/\/c$/, "") + "/stalker_portal/server/load.php"
+  }
+
+  return url + "/stalker_portal/server/load.php"
+}
+
+import axios from "axios"
+
+async function stalkerHandshake(baseUrl, mac) {
+  const res = await axios.get(baseUrl, {
+    params: { type: "stb", action: "handshake", token: "" },
+    headers: {
+      "User-Agent": "Mozilla/5.0",
+      "X-User-Agent": "Model: MAG250; Link: WiFi",
+      "Authorization": `Bearer ${mac}`
+    }
+  })
+
+  return res.data.js.token
+}
+
+async function stalkerGetChannels(baseUrl, mac, token) {
+  const res = await axios.get(baseUrl, {
+    params: { type: "itv", action: "get_all_channels" },
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "X-User-Agent": "Model: MAG250; Link: WiFi"
+    }
+  })
+
+  return res.data.js.data
+}
+
 import express from "express";
 import cors from "cors";
 
@@ -77,37 +125,69 @@ app.get("/manifest.json", (req, res) => {
   });
 });
 
-app.get("/catalog/:type/:id.json", async (req, res) => {
+app.get("/catalog/tv/stalker_tv.json", async (req, res) => {
   try {
-    if (!req.query.config) {
+    const { portal, mac } = req.query
+    if (!portal || !mac) {
       return res.json({ metas: [] })
     }
 
-    const config = JSON.parse(
-      Buffer.from(req.query.config, "base64").toString()
-    )
+    const baseUrl = normalizeStalkerUrl(portal)
 
-    // para já usamos só o primeiro portal
-    const { portal, mac } = config.portals[0]
+    const token = await stalkerHandshake(baseUrl, mac)
+    const channels = await stalkerGetChannels(baseUrl, mac, token)
 
-    console.log("CATALOG →", portal, mac)
+    const metas = channels.map(ch => ({
+      id: `stalker:${ch.id}`,
+      type: "tv",
+      name: ch.name,
+      poster: ch.logo || null
+    }))
 
-    // ⚠️ TESTE (canal fake)
+    res.json({ metas })
+  } catch (err) {
+    console.error(err.message)
+    res.json({ metas: [] })
+  }
+})
+
+app.get("/stream/tv/:id.json", async (req, res) => {
+  try {
+    const { portal, mac } = req.query
+    if (!portal || !mac) {
+      return res.json({ streams: [] })
+    }
+
+    const channelId = req.params.id.replace("stalker:", "")
+    const baseUrl = normalizeStalkerUrl(portal)
+
+    const token = await stalkerHandshake(baseUrl, mac)
+
+    const linkRes = await axios.get(baseUrl, {
+      params: {
+        type: "itv",
+        action: "create_link",
+        cmd: `ffmpeg http://localhost/ch/${channelId}`
+      },
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "X-User-Agent": "Model: MAG250; Link: WiFi"
+      }
+    })
+
+    const streamUrl = linkRes.data.js.cmd.replace("ffmpeg ", "")
+
     res.json({
-      metas: [
+      streams: [
         {
-          id: "stalker:test",
-          type: "tv",
-          name: "Canal Teste",
-          poster: "https://via.placeholder.com/300x450.png?text=Stalker",
-          background: "https://via.placeholder.com/1280x720.png?text=Stalker"
+          title: "Stalker IPTV",
+          url: streamUrl
         }
       ]
     })
-
   } catch (err) {
-    console.error("CATALOG ERROR:", err)
-    res.status(500).json({ metas: [] })
+    console.error(err.message)
+    res.json({ streams: [] })
   }
 })
 
