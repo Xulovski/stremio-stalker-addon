@@ -151,31 +151,46 @@ app.get("/catalog/tv/stalker_tv.json", async (req, res) => {
   }
 })
 
-app.get("/stream/tv/:id.json", async (req, res) => {
+import axios from "axios"
+
+app.get("/stream/:type/:id.json", async (req, res) => {
   try {
     const { portal, mac } = req.query
+    const channelId = req.params.id.replace("stalker:", "")
+
     if (!portal || !mac) {
       return res.json({ streams: [] })
     }
 
-    const channelId = req.params.id.replace("stalker:", "")
-    const baseUrl = normalizeStalkerUrl(portal)
+    const base = portal.replace(/\/$/, "")
 
-    const token = await stalkerHandshake(baseUrl, mac)
-
-    const linkRes = await axios.get(baseUrl, {
-      params: {
-        type: "itv",
-        action: "create_link",
-        cmd: `ffmpeg http://localhost/ch/${channelId}`
-      },
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "X-User-Agent": "Model: MAG250; Link: WiFi"
+    // 1️⃣ Handshake
+    const handshake = await axios.get(
+      `${base}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml`,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "X-User-Agent": "Model: MAG250; Link: WiFi",
+          "Cookie": `mac=${mac}; stb_lang=en; timezone=GMT`
+        }
       }
-    })
+    )
 
-    const streamUrl = linkRes.data.js.cmd.replace("ffmpeg ", "")
+    const token = handshake.data.js.token
+    const cookie = handshake.headers["set-cookie"].join("; ")
+
+    // 2️⃣ Create link
+    const create = await axios.get(
+      `${base}/portal.php?action=create_link&type=itv&cmd=ffmpeg http://localhost/ch/${channelId}&JsHttpRequest=1-xml`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Cookie": cookie
+        }
+      }
+    )
+
+    const streamUrl = create.data.js.cmd.replace("ffmpeg ", "")
 
     res.json({
       streams: [
@@ -185,8 +200,8 @@ app.get("/stream/tv/:id.json", async (req, res) => {
         }
       ]
     })
-  } catch (err) {
-    console.error(err.message)
+  } catch (e) {
+    console.error("STREAM ERROR:", e.message)
     res.json({ streams: [] })
   }
 })
