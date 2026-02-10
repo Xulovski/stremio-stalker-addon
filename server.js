@@ -151,8 +151,6 @@ app.get("/catalog/tv/stalker_tv.json", async (req, res) => {
   }
 })
 
-import axios from "axios"
-
 app.get("/stream/:type/:id.json", async (req, res) => {
   try {
     const { portal, mac } = req.query
