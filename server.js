@@ -1,16 +1,28 @@
+import express from "express"
+import axios from "axios"
+import cors from "cors"
+
+/* =========================
+   CONFIG
+========================= */
+
+const app = express()
+const PORT = process.env.PORT || 7000
+const ADDON_URL = "https://stremio-stalker-addon-1.onrender.com"
+
+app.use(cors())
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+
+/* =========================
+   HELPERS
+========================= */
+
 function normalizeStalkerUrl(input) {
-  let url = input.trim()
+  let url = input.trim().replace(/\/+$/, "")
 
-  // remove barras finais
-  url = url.replace(/\/+$/, "")
-
-  if (url.includes("load.php")) {
-    return url
-  }
-
-  if (url.includes("portal.php")) {
-    return url
-  }
+  if (url.includes("load.php")) return url
+  if (url.includes("portal.php")) return url
 
   if (url.endsWith("/c")) {
     return url.replace(/\/c$/, "") + "/stalker_portal/server/load.php"
@@ -19,46 +31,55 @@ function normalizeStalkerUrl(input) {
   return url + "/stalker_portal/server/load.php"
 }
 
-import axios from "axios"
+function getBasePortal(url) {
+  return url.replace("/stalker_portal/server/load.php", "")
+}
+
+/* =========================
+   STALKER API
+========================= */
 
 async function stalkerHandshake(baseUrl, mac) {
   const res = await axios.get(baseUrl, {
-    params: { type: "stb", action: "handshake", token: "" },
+    params: {
+      type: "stb",
+      action: "handshake",
+      token: "",
+      JsHttpRequest: "1-xml"
+    },
     headers: {
       "User-Agent": "Mozilla/5.0",
       "X-User-Agent": "Model: MAG250; Link: WiFi",
-      "Authorization": `Bearer ${mac}`
+      "Cookie": `mac=${mac}`
     }
   })
 
-  return res.data.js.token
+  return {
+    token: res.data.js.token,
+    cookie: res.headers["set-cookie"]?.join("; ") || ""
+  }
 }
 
-async function stalkerGetChannels(baseUrl, mac, token) {
+async function stalkerGetChannels(baseUrl, token) {
   const res = await axios.get(baseUrl, {
-    params: { type: "itv", action: "get_all_channels" },
+    params: {
+      type: "itv",
+      action: "get_all_channels",
+      JsHttpRequest: "1-xml"
+    },
     headers: {
       "Authorization": `Bearer ${token}`,
       "X-User-Agent": "Model: MAG250; Link: WiFi"
     }
   })
 
-  return res.data.js.data
+  return res.data.js.data || []
 }
 
-import express from "express";
-import cors from "cors";
+/* =========================
+   CONFIG PAGE
+========================= */
 
-const app = express();
-const PORT = process.env.PORT || 7000;
-
-app.use(cors());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
-const BASE_URL = "https://stremio-stalker-addon-1.onrender.com";
-
-/* CONFIG PAGE */
 app.get("/configure", (req, res) => {
   res.send(`
     <html>
@@ -75,67 +96,59 @@ app.get("/configure", (req, res) => {
         </form>
       </body>
     </html>
-  `);
-});
-
-/* HANDLE CONFIG */
-app.post("/configure", (req, res) => {
-  const { portal, mac } = req.body
-
-  if (!portal || !mac) {
-    return res.status(400).send("Dados em falta")
-  }
-
-  const config = {
-    portals: [
-      { portal, mac }
-    ]
-  }
-
-  const encoded = Buffer
-    .from(JSON.stringify(config))
-    .toString("base64")
-
-  const redirectUrl =
-    `stremio://stremio-stalker-addon-1.onrender.com/manifest.json?config=${encoded}`
-
-  res.redirect(302, redirectUrl)
+  `)
 })
 
-/* MANIFEST */
+app.post("/configure", (req, res) => {
+  const { portal, mac } = req.body
+  if (!portal || !mac) return res.status(400).send("Dados em falta")
+
+  const config = {
+    portals: [{ portal, mac }]
+  }
+
+  const encoded = Buffer.from(JSON.stringify(config)).toString("base64")
+
+  res.redirect(
+    302,
+    `stremio://${ADDON_URL}/manifest.json?config=${encoded}`
+  )
+})
+
+/* =========================
+   MANIFEST
+========================= */
+
 app.get("/manifest.json", (req, res) => {
   res.json({
     id: "org.xulovski.stremio.stalker",
     version: "1.0.0",
     name: "Stalker IPTV (Multi-Portal)",
-    description: "Addon Stremio para Stalker IPTV",
+    description: "Addon Stremio Stalker IPTV",
     types: ["tv"],
     resources: ["catalog", "stream"],
     catalogs: [
-      {
-        type: "tv",
-        id: "stalker_tv",
-        name: "Stalker IPTV"
-      }
+      { type: "tv", id: "stalker_tv", name: "Stalker IPTV" }
     ],
     behaviorHints: {
       configurable: true,
-      configurationRequired: false
+      configurationRequired: true
     }
-  });
-});
+  })
+})
+
+/* =========================
+   CATALOG
+========================= */
 
 app.get("/catalog/tv/stalker_tv.json", async (req, res) => {
   try {
     const { portal, mac } = req.query
-    if (!portal || !mac) {
-      return res.json({ metas: [] })
-    }
+    if (!portal || !mac) return res.json({ metas: [] })
 
-    const baseUrl = normalizeStalkerUrl(portal)
-
-    const token = await stalkerHandshake(baseUrl, mac)
-    const channels = await stalkerGetChannels(baseUrl, mac, token)
+    const loadUrl = normalizeStalkerUrl(portal)
+    const { token } = await stalkerHandshake(loadUrl, mac)
+    const channels = await stalkerGetChannels(loadUrl, token)
 
     const metas = channels.map(ch => ({
       id: `stalker:${ch.id}`,
@@ -145,48 +158,42 @@ app.get("/catalog/tv/stalker_tv.json", async (req, res) => {
     }))
 
     res.json({ metas })
-  } catch (err) {
-    console.error(err.message)
+  } catch (e) {
+    console.error("CATALOG ERROR:", e.message)
     res.json({ metas: [] })
   }
 })
 
+/* =========================
+   STREAM
+========================= */
+
 app.get("/stream/:type/:id.json", async (req, res) => {
   try {
     const { portal, mac } = req.query
+    if (!portal || !mac) return res.json({ streams: [] })
+
     const channelId = req.params.id.replace("stalker:", "")
-
-    if (!portal || !mac) {
-      return res.json({ streams: [] })
-    }
-
-    const base = portal.replace(/\/$/, "")
+    const loadUrl = normalizeStalkerUrl(portal)
+    const basePortal = getBasePortal(loadUrl)
 
     // 1️⃣ Handshake
-    const handshake = await axios.get(
-      `${base}/portal.php?action=handshake&type=stb&token=&JsHttpRequest=1-xml`,
-      {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "X-User-Agent": "Model: MAG250; Link: WiFi",
-          "Cookie": `mac=${mac}; stb_lang=en; timezone=GMT`
-        }
-      }
-    )
-
-    const token = handshake.data.js.token
-    const cookie = handshake.headers["set-cookie"].join("; ")
+    const { token, cookie } = await stalkerHandshake(loadUrl, mac)
 
     // 2️⃣ Create link
-    const create = await axios.get(
-      `${base}/portal.php?action=create_link&type=itv&cmd=ffmpeg http://localhost/ch/${channelId}&JsHttpRequest=1-xml`,
-      {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Cookie": cookie
-        }
+    const create = await axios.get(`${basePortal}/portal.php`, {
+      params: {
+        action: "create_link",
+        type: "itv",
+        cmd: `ffmpeg http://localhost/ch/${channelId}`,
+        JsHttpRequest: "1-xml"
+      },
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Cookie": cookie,
+        "X-User-Agent": "Model: MAG250; Link: WiFi"
       }
-    )
+    })
 
     const streamUrl = create.data.js.cmd.replace("ffmpeg ", "")
 
@@ -204,9 +211,10 @@ app.get("/stream/:type/:id.json", async (req, res) => {
   }
 })
 
-const PORT = process.env.PORT || 3000
+/* =========================
+   START
+========================= */
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log("Servidor ativo na porta", PORT)
-})
-
+}) 
