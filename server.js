@@ -4,7 +4,6 @@ import axios from "axios"
 
 const app = express()
 
-// IMPORTANTE PARA RENDER
 const PORT = process.env.PORT || 3000
 
 const ADDON_ID = "org.xulovski.stremio.stalker"
@@ -108,11 +107,11 @@ app.get("/manifest.json", (req, res) => {
     version: "1.0.0",
     name: ADDON_NAME,
     description: "Addon Stalker IPTV com múltiplos portais",
-    types: ["tv"],
+    types: ["movie"], // 🔥 ALTERADO
     resources: ["catalog", "stream"],
     catalogs: config
       ? config.portals.map((_, i) => ({
-          type: "tv",
+          type: "movie", // 🔥 ALTERADO
           id: `stalker_${i}`,
           name: `Servidor ${i + 1}`
         }))
@@ -126,7 +125,7 @@ app.get("/manifest.json", (req, res) => {
 
 /* ================= CATALOG ================= */
 
-app.get("/catalog/tv/:id.json", async (req, res) => {
+app.get("/catalog/movie/:id.json", async (req, res) => {
   try {
     const config = decodeConfig(req)
     if (!config) return res.json({ metas: [] })
@@ -166,8 +165,8 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
     const channels = channelsRes.data?.js?.data || []
 
     const metas = channels.map(ch => ({
-      id: `tv_${index}_${ch.id}`,
-      type: "tv",
+      id: `stalker_${index}_${ch.id}`, // 🔥 ID CORRIGIDO
+      type: "movie", // 🔥 ALTERADO
       name: ch.name,
       poster: ch.logo || null
     }))
@@ -181,7 +180,7 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 
 /* ================= STREAM ================= */
 
-app.get("/stream/tv/:id.json", async (req, res) => {
+app.get("/stream/movie/:id.json", async (req, res) => {
   console.log("STREAM REQUEST:", req.params.id)
 
   try {
@@ -225,8 +224,7 @@ app.get("/stream/tv/:id.json", async (req, res) => {
 
     let streamUrl = create.data?.js?.cmd?.replace("ffmpeg ", "").trim()
 
-    // Extrair URL após "-i" se existir
-    const match = streamUrl.match(/-i\s+(\S+)/)
+    const match = streamUrl?.match(/-i\s+(\S+)/)
     if (match) streamUrl = match[1]
 
     if (!streamUrl) return res.json({ streams: [] })
