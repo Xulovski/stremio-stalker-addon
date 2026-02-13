@@ -108,11 +108,11 @@ app.get("/manifest.json", (req, res) => {
     version: "1.0.0",
     name: ADDON_NAME,
     description: "Addon Stalker IPTV com múltiplos portais",
-    types: ["channel"],
+    types: ["tv"],                 // <<< Corrigido para "tv"
     resources: ["catalog", "stream"],
     catalogs: config
       ? config.portals.map((_, i) => ({
-          type: "channel",
+          type: "tv",             // <<< Corrigido para "tv"
           id: `stalker_${i}`,
           name: `Servidor ${i + 1}`
         }))
@@ -126,7 +126,7 @@ app.get("/manifest.json", (req, res) => {
 
 /* ================= CATALOG ================= */
 
-app.get("/catalog/channel/:id.json", async (req, res) => {
+app.get("/catalog/tv/:id.json", async (req, res) => {
   try {
     const config = decodeConfig(req)
     if (!config) return res.json({ metas: [] })
@@ -168,7 +168,7 @@ app.get("/catalog/channel/:id.json", async (req, res) => {
 
     const metas = channels.map(ch => ({
       id: `stalker:${index}:${ch.id}`,
-      type: "channel",
+      type: "tv",       // <<< Corrigido para "tv"
       name: ch.name,
       poster: ch.logo || null
     }))
@@ -182,7 +182,7 @@ app.get("/catalog/channel/:id.json", async (req, res) => {
 
 /* ================= STREAM ================= */
 
-app.get("/stream/channel/:id.json", async (req, res) => {
+app.get("/stream/tv/:id.json", async (req, res) => {
   console.log("STREAM REQUEST:", req.params.id)
 
   try {
