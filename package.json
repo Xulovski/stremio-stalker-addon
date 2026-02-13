@@ -1,7 +1,7 @@
 {
   "name": "stremio-stalker-addon",
   "version": "1.0.0",
-  "description": "",
+  "description": "Addon Stremio para portais Stalker (MAG / IPTV).",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -19,5 +19,17 @@
   "devDependencies": {
     "nodemon": "^3.0.0"
   },
-  "type": "module"
+  "type": "module",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xulovski/stremio-stalker-addon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Xulovski/stremio-stalker-addon/issues"
+  },
+  "homepage": "https://github.com/Xulovski/stremio-stalker-addon#readme"
 }
