@@ -108,11 +108,11 @@ app.get("/manifest.json", (req, res) => {
     version: "1.0.0",
     name: ADDON_NAME,
     description: "Addon Stalker IPTV com múltiplos portais",
-    types: ["tv"],                 // <<< Corrigido para "tv"
+    types: ["tv"],
     resources: ["catalog", "stream"],
     catalogs: config
       ? config.portals.map((_, i) => ({
-          type: "tv",             // <<< Corrigido para "tv"
+          type: "tv",
           id: `stalker_${i}`,
           name: `Servidor ${i + 1}`
         }))
@@ -148,7 +148,6 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
     })
 
     const token = handshake.data?.js?.token
-
     if (!token) return res.json({ metas: [] })
 
     const channelsRes = await axios.get(`${portal}/portal.php`, {
@@ -168,7 +167,7 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 
     const metas = channels.map(ch => ({
       id: `stalker:${index}:${ch.id}`,
-      type: "tv",       // <<< Corrigido para "tv"
+      type: "tv",
       name: ch.name,
       poster: ch.logo || null
     }))
@@ -206,7 +205,6 @@ app.get("/stream/tv/:id.json", async (req, res) => {
     })
 
     const token = handshake.data?.js?.token
-
     if (!token) return res.json({ streams: [] })
 
     const create = await axios.get(`${portal}/portal.php`, {
@@ -223,7 +221,11 @@ app.get("/stream/tv/:id.json", async (req, res) => {
       }
     })
 
-    const streamUrl = create.data?.js?.cmd?.replace("ffmpeg ", "")
+    let streamUrl = create.data?.js?.cmd?.replace("ffmpeg ", "").trim()
+
+    // Extrair URL após "-i" se existir
+    const match = streamUrl.match(/-i\s+(\S+)/)
+    if (match) streamUrl = match[1]
 
     if (!streamUrl) return res.json({ streams: [] })
 
