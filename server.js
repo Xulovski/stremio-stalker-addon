@@ -154,35 +154,58 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
   }
 });
 
-/* ================= STREAM ================= */
+/* ================= STREAM CORRIGIDO ================= */
 app.get("/stream/tv/:id.json", async (req, res) => {
   const config = decodeConfig(req);
-  if (!config || !req.params.id.startsWith("stalker:")) return res.json({ streams: [] });
-
-  const [ , portalIndex, channelId] = req.params.id.split(":");
-  const { portal, mac } = config.portals[parseInt(portalIndex)];
-
-  const token = await getHandshake(portal, mac);
-  if (!token) return res.json({ streams: [] });
+  if (!config) return res.json({ streams: [] });
 
   try {
+    // Exemplo de ID: stalker:0:123 (portal 0, canal 123)
+    const parts = req.params.id.split(":");
+    if (parts.length < 3) return res.json({ streams: [] });
+
+    const portalIndex = parseInt(parts[1]);
+    const channelId = parts[2];
+    const { portal, mac } = config.portals[portalIndex];
+
+    const token = await getHandshake(portal, mac);
+    if (!token) return res.json({ streams: [] });
+
     const response = await axios.get(`${portal}/portal.php`, {
-      params: { action: "create_link", type: "itv", cmd: `/ch/${channelId}`, JsHttpRequest: "1-xml" },
-      headers: { "User-Agent": USER_AGENT, "Cookie": `mac=${mac}; authorization=Bearer ${token}` }
+      params: { 
+        action: "create_link", 
+        type: "itv", 
+        cmd: `/ch/${channelId}`, 
+        JsHttpRequest: "1-xml" 
+      },
+      headers: { 
+        "User-Agent": USER_AGENT, 
+        "Cookie": `mac=${mac}; authorization=Bearer ${token}` 
+      },
+      timeout: 10000 // Aumentado para 10s
     });
 
     let streamUrl = response.data?.js?.cmd || "";
-    streamUrl = streamUrl.split(" ").pop(); // Limpa prefixos
+    
+    // Limpeza profunda da URL
+    streamUrl = streamUrl.replace(/ffmpeg /g, "").replace(/ffrt /g, "").trim();
+    if (streamUrl.includes(" ")) streamUrl = streamUrl.split(" ").pop();
 
     if (streamUrl && streamUrl.startsWith("http")) {
-      res.json({ streams: [{ name: "Directo", title: "Assistir Agora", url: streamUrl }] });
-    } else {
-      res.json({ streams: [] });
+      return res.json({
+        streams: [{ 
+          name: "Stalker Portal", 
+          title: `Servidor ${portalIndex + 1}\nCanal ID: ${channelId}`, 
+          url: streamUrl 
+        }]
+      });
     }
   } catch (e) {
-    res.json({ streams: [] });
+    console.error("Erro no Stream:", e.message);
   }
+  res.json({ streams: [] });
 });
+
 
 /* ================= START ================= */
 
