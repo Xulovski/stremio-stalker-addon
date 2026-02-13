@@ -166,7 +166,7 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
     const channels = channelsRes.data?.js?.data || []
 
     const metas = channels.map(ch => ({
-      id: `stalker:${index}:${ch.id}`,
+      id: `tv_${index}_${ch.id}`,
       type: "tv",
       name: ch.name,
       poster: ch.logo || null
@@ -188,7 +188,9 @@ app.get("/stream/tv/:id.json", async (req, res) => {
     const config = decodeConfig(req)
     if (!config) return res.json({ streams: [] })
 
-    const [, portalIndex, channelId] = req.params.id.split(":")
+    const parts = req.params.id.split("_")
+    const portalIndex = parts[1]
+    const channelId = parts[2]
     const { portal, mac } = config.portals[portalIndex]
 
     const handshake = await axios.get(`${portal}/portal.php`, {
