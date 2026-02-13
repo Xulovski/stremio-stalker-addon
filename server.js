@@ -3,249 +3,140 @@ import cors from "cors"
 import axios from "axios"
 
 const app = express()
-
 const PORT = process.env.PORT || 3000
-
-const ADDON_ID = "org.xulovski.stremio.stalker"
-const ADDON_NAME = "Stalker IPTV Multi-Portal"
 
 app.use(cors())
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }))
 
-/* ================= HELPERS ================= */
+const USER_AGENT = "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3"
+
+/* ================= HELPERS DE AUTENTICAÇÃO ================= */
+
+async function getStalkerToken(portal, mac) {
+  try {
+    const res = await axios.get(`${portal}/portal.php`, {
+      params: { action: "handshake", type: "stb", JsHttpRequest: "1-xml" },
+      headers: { "User-Agent": USER_AGENT, "Cookie": `mac=${mac}` }
+    })
+    return res.data?.js?.token || null
+  } catch (e) { return null }
+}
 
 function decodeConfig(req) {
-  if (!req.query.config) return null
   try {
-    return JSON.parse(
-      Buffer.from(req.query.config, "base64").toString("utf8")
-    )
-  } catch {
-    return null
-  }
+    return JSON.parse(Buffer.from(req.query.config, "base64").toString("utf8"))
+  } catch { return null }
 }
-
-function normalizePortal(url) {
-  return url.trim().replace(/\/+$/, "").replace(/\/c$/, "")
-}
-
-/* ================= CONFIG PAGE ================= */
-
-app.get("/configure", (req, res) => {
-  res.send(`
-  <html>
-  <body>
-    <h2>Configurar Stalker IPTV</h2>
-    <form method="POST">
-      <div id="list">
-        <div>
-          Portal URL:<br>
-          <input name="portal[]" required><br>
-          MAC Address:<br>
-          <input name="mac[]" required><br><br>
-        </div>
-      </div>
-      <button type="button" onclick="add()">Adicionar servidor</button><br><br>
-      <button type="submit">Guardar e Instalar</button>
-    </form>
-
-    <script>
-      function add() {
-        const div = document.createElement("div")
-        div.innerHTML = \`
-          <hr>
-          Portal URL:<br>
-          <input name="portal[]" required><br>
-          MAC Address:<br>
-          <input name="mac[]" required><br><br>
-        \`
-        document.getElementById("list").appendChild(div)
-      }
-    </script>
-  </body>
-  </html>
-  `)
-})
-
-app.post("/configure", (req, res) => {
-  try {
-    const portals = Array.isArray(req.body.portal)
-      ? req.body.portal
-      : [req.body.portal]
-
-    const macs = Array.isArray(req.body.mac)
-      ? req.body.mac
-      : [req.body.mac]
-
-    const config = {
-      portals: portals.map((p, i) => ({
-        portal: normalizePortal(p),
-        mac: macs[i]
-      }))
-    }
-
-    const encoded = Buffer.from(
-      JSON.stringify(config)
-    ).toString("base64")
-
-    res.redirect(
-      `stremio://${req.headers.host}/manifest.json?config=${encoded}`
-    )
-  } catch (err) {
-    res.status(500).send("Erro ao salvar configuração")
-  }
-})
 
 /* ================= MANIFEST ================= */
 
 app.get("/manifest.json", (req, res) => {
   const config = decodeConfig(req)
-
   res.json({
-    id: ADDON_ID,
-    version: "1.0.0",
-    name: ADDON_NAME,
-    description: "Addon Stalker IPTV com múltiplos portais",
-    types: ["movie"], // 🔥 ALTERADO
+    id: "org.xulovski.stremio.stalker",
+    version: "1.1.0",
+    name: "Stalker IPTV Multi-Portal",
+    description: "Canais em direto via Portais Stalker",
+    types: ["tv"],
     resources: ["catalog", "stream"],
-    catalogs: config
-      ? config.portals.map((_, i) => ({
-          type: "movie", // 🔥 ALTERADO
-          id: `stalker_${i}`,
-          name: `Servidor ${i + 1}`
-        }))
-      : [],
-    behaviorHints: {
-      configurable: true,
-      configurationRequired: !config
-    }
+    catalogs: config ? config.portals.map((_, i) => ({
+      type: "tv",
+      id: `stalker_portal_${i}`,
+      name: `Servidor ${i + 1}`
+    })) : [],
+    behaviorHints: { configurable: true, configurationRequired: !config }
   })
 })
 
 /* ================= CATALOG ================= */
 
-app.get("/catalog/movie/:id.json", async (req, res) => {
+app.get("/catalog/tv/:id.json", async (req, res) => {
+  const config = decodeConfig(req)
+  if (!config) return res.json({ metas: [] })
+
+  const index = parseInt(req.params.id.split("_").pop())
+  const { portal, mac } = config.portals[index]
+
+  const token = await getStalkerToken(portal, mac)
+  if (!token) return res.json({ metas: [] })
+
   try {
-    const config = decodeConfig(req)
-    if (!config) return res.json({ metas: [] })
-
-    const index = Number(req.params.id.replace("stalker_", ""))
-    const { portal, mac } = config.portals[index]
-
-    const handshake = await axios.get(`${portal}/portal.php`, {
-      params: {
-        action: "handshake",
-        type: "stb",
-        JsHttpRequest: "1-xml"
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "X-User-Agent": "Model: MAG250; Link: WiFi",
-        Cookie: `mac=${mac}`
-      }
-    })
-
-    const token = handshake.data?.js?.token
-    if (!token) return res.json({ metas: [] })
-
     const channelsRes = await axios.get(`${portal}/portal.php`, {
-      params: {
-        action: "get_all_channels",
-        type: "itv",
-        JsHttpRequest: "1-xml"
-      },
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-User-Agent": "Model: MAG250; Link: WiFi",
-        Cookie: `mac=${mac}`
+      params: { action: "get_all_channels", type: "itv", JsHttpRequest: "1-xml" },
+      headers: { 
+        "User-Agent": USER_AGENT, 
+        "Cookie": `mac=${mac}; authorization=Bearer ${token}` 
       }
     })
 
-    const channels = channelsRes.data?.js?.data || []
-
-    const metas = channels.map(ch => ({
-      id: `stalker_${index}_${ch.id}`, // 🔥 ID CORRIGIDO
-      type: "movie", // 🔥 ALTERADO
+    const metas = (channelsRes.data?.js?.data || []).map(ch => ({
+      id: `stalker:${index}:${ch.id}`,
+      type: "tv",
       name: ch.name,
-      poster: ch.logo || null
+      poster: ch.logo ? (ch.logo.startsWith('http') ? ch.logo : `${portal}/${ch.logo}`) : null
     }))
 
     res.json({ metas })
-  } catch (e) {
-    console.error("CATALOG ERROR:", e.message)
-    res.json({ metas: [] })
-  }
+  } catch (e) { res.json({ metas: [] }) }
 })
 
 /* ================= STREAM ================= */
 
-app.get("/stream/movie/:id.json", async (req, res) => {
-  console.log("STREAM REQUEST:", req.params.id)
+app.get("/stream/tv/:id.json", async (req, res) => {
+  const config = decodeConfig(req)
+  if (!config) return res.json({ streams: [] })
+
+  const [, portalIndex, channelId] = req.params.id.split(":")
+  const { portal, mac } = config.portals[portalIndex]
+
+  const token = await getStalkerToken(portal, mac)
+  if (!token) return res.json({ streams: [] })
 
   try {
-    const config = decodeConfig(req)
-    if (!config) return res.json({ streams: [] })
-
-    const parts = req.params.id.split("_")
-    const portalIndex = parts[1]
-    const channelId = parts[2]
-    const { portal, mac } = config.portals[portalIndex]
-
-    const handshake = await axios.get(`${portal}/portal.php`, {
-      params: {
-        action: "handshake",
-        type: "stb",
-        JsHttpRequest: "1-xml"
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "X-User-Agent": "Model: MAG250; Link: WiFi",
-        Cookie: `mac=${mac}`
+    const linkRes = await axios.get(`${portal}/portal.php`, {
+      params: { action: "create_link", type: "itv", cmd: `/ch/${channelId}`, JsHttpRequest: "1-xml" },
+      headers: { 
+        "User-Agent": USER_AGENT, 
+        "Cookie": `mac=${mac}; authorization=Bearer ${token}` 
       }
     })
 
-    const token = handshake.data?.js?.token
-    if (!token) return res.json({ streams: [] })
+    let rawUrl = linkRes.data?.js?.cmd || ""
+    // Limpeza crucial: remove prefixos como "ffrt ", "ffmpeg ", etc.
+    const cleanUrl = rawUrl.split(" ").pop()
 
-    const create = await axios.get(`${portal}/portal.php`, {
-      params: {
-        action: "create_link",
-        type: "itv",
-        cmd: `/ch/${channelId}`,
-        JsHttpRequest: "1-xml"
-      },
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-User-Agent": "Model: MAG250; Link: WiFi",
-        Cookie: `mac=${mac}`
-      }
-    })
-
-    let streamUrl = create.data?.js?.cmd?.replace("ffmpeg ", "").trim()
-
-    const match = streamUrl?.match(/-i\s+(\S+)/)
-    if (match) streamUrl = match[1]
-
-    if (!streamUrl) return res.json({ streams: [] })
+    if (!cleanUrl || !cleanUrl.startsWith("http")) return res.json({ streams: [] })
 
     res.json({
-      streams: [
-        {
-          name: "Play",
-          title: "Stalker IPTV",
-          url: streamUrl
-        }
-      ]
+      streams: [{
+        name: "Stalker Portal",
+        title: "Qualidade Original",
+        url: cleanUrl
+      }]
     })
-  } catch (e) {
-    console.error("STREAM ERROR:", e.message)
-    res.json({ streams: [] })
-  }
+  } catch (e) { res.json({ streams: [] }) }
 })
 
-/* ================= START ================= */
+/* ================= CONFIG PAGE (SIMPLIFICADA) ================= */
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("Addon Stremio ativo na porta", PORT)
+app.get("/configure", (req, res) => {
+  res.send(`
+    <style>body{font-family:sans-serif;padding:20px;background:#111;color:#fff}input{display:block;width:100%;margin:10px 0;padding:10px}</style>
+    <h2>Configurar Stalker</h2>
+    <form method="POST">
+      URL do Portal: <input name="portal" placeholder="http://url-do-servidor:8080/c" required>
+      MAC Address: <input name="mac" placeholder="00:1A:79:XX:XX:XX" required>
+      <button type="submit" style="padding:10px 20px;cursor:pointer">Instalar no Stremio</button>
+    </form>
+  `)
 })
+
+app.post("/configure", (req, res) => {
+  const config = { portals: [{ portal: req.body.portal.replace(/\/$/, ""), mac: req.body.mac }] }
+  const encoded = Buffer.from(JSON.stringify(config)).toString("base64")
+  res.redirect(`stremio://${req.headers.host}/manifest.json?config=${encoded}`)
+})
+
+app.listen(PORT, "0.0.0.0", () => console.log(`Addon rodando na porta ${PORT}`))
+
