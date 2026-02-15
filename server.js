@@ -187,44 +187,137 @@ app.get("/stream/tv/:id.json", async (req, res) => {
 
   try {
     const config = decodeConfig(req);
-    if (!config || !config.portals) return res.json({ streams: [] });
+    if (!config || !config.portals || config.portals.length === 0) {
+      console.log("[STREAM] Config inválida ou sem portais");
+      return res.json({ streams: [] });
+    }
 
+    // Parsing robusto do ID: stalker:INDEX:resto_do_id
     const idParts = req.params.id.split(':');
     if (idParts[0] !== 'stalker' || idParts.length < 3) {
-      console.log("[STREAM] Formato de ID inválido");
+      console.log("[STREAM] Formato de ID inválido:", req.params.id);
       return res.json({ streams: [] });
     }
 
     const portalIndex = parseInt(idParts[1], 10);
-    const channelId = idParts.slice(2).join(':'); // permite nomes com : ou espaços
+    const channelId = idParts.slice(2).join(':'); // permite : , espaços, etc. no nome/ID do canal
 
-    if (isNaN(portalIndex) || portalIndex >= config.portals.length) {
-      console.log("[STREAM] Índice de portal inválido:", portalIndex);
+    if (isNaN(portalIndex) || portalIndex < 0 || portalIndex >= config.portals.length) {
+      console.log("[STREAM] Índice de portal inválido:", portalIndex, "Total portais:", config.portals.length);
       return res.json({ streams: [] });
     }
 
     const { portal, mac } = config.portals[portalIndex];
-    console.log(`[STREAM] Usando portal ${portalIndex}: ${portal} | Canal: ${channelId}`);
+    console.log(`[STREAM] Portal selecionado: ${portalIndex} → ${portal}`);
+    console.log(`[STREAM] Canal solicitado: ${channelId}`);
 
-    // ... o resto do código (handshake, token, create_link) continua igual
+    // Handshake
+    const handshake = await axios.get(`${portal}/portal.php`, {
+      params: {
+        action: "handshake",
+        type: "stb",
+        JsHttpRequest: "1-xml"
+      },
+      headers: {
+        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+        "X-User-Agent": "Model: MAG250; Link: WiFi",
+        Cookie: `mac=${mac}`
+      },
+      timeout: 15000
+    });
 
-    // No final, quando tens o streamUrl:
-    if (streamUrl) {
-      console.log("[STREAM] Sucesso - URL:", streamUrl);
+    const token = handshake.data?.js?.token;
+    if (!token) {
+      console.log("[STREAM] Handshake falhou - sem token");
+      return res.json({ streams: [] });
+    }
+
+    console.log("[STREAM] Token obtido com sucesso");
+
+    // Create link - com cmd mais comum em portais modernos
+    const create = await axios.get(`${portal}/portal.php`, {
+      params: {
+        action: "create_link",
+        type: "itv",
+        cmd: `/ch/${channelId}_`,  // underscore final funciona na maioria
+        JsHttpRequest: "1-xml"
+      },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
+        "X-User-Agent": "Model: MAG250; Link: WiFi",
+        Cookie: `mac=${mac}`,
+        Referer: `${portal}/c/`,
+        Origin: portal
+      },
+      timeout: 20000
+    });
+
+    // Logs completos para debug
+    console.log("=== CREATE_LINK REQUEST ===");
+    console.log("URL:", `\( {portal}/portal.php?action=create_link&type=itv&cmd=/ch/ \){channelId}_`);
+    console.log("=== CREATE_LINK RESPONSE STATUS ===", create.status);
+    console.log("=== CREATE_LINK FULL DATA ===", JSON.stringify(create.data, null, 2));
+
+    // Tentativas de extrair o URL de várias chaves possíveis
+    let raw = null;
+    if (create.data?.js) {
+      raw =
+        create.data.js.cmd ||
+        create.data.js.link ||
+        create.data.js.url ||
+        create.data.js.streamer ||
+        create.data.js.stream ||
+        create.data.js.play_url ||
+        (typeof create.data.js === 'string' ? create.data.js : null);
+    }
+
+    console.log("=== VALOR RAW EXTRAÍDO ===", raw);
+
+    let streamUrl = null;
+    if (typeof raw === 'string' && raw.trim()) {
+      streamUrl = raw
+        .trim()
+        .replace(/^ffmpeg\s*/i, '')           // remove "ffmpeg " ou "ffmpeg http..."
+        .replace(/\s*\|.*$/g, '')             // remove pipe ffmpeg no final
+        .replace(/\s+$/, '');                 // limpa espaços finais
+
+      // Se for relativo (ex: /udp/..., /live/...) → junta o portal base
+      if (streamUrl && !streamUrl.match(/^https?:\/\//i)) {
+        streamUrl = portal.replace(/\/+$/, '') + '/' + streamUrl.replace(/^\/+/, '');
+      }
+
+      // Preserva query string se existir
+      if (raw.includes('?') && !streamUrl.includes('?')) {
+        const queryPart = raw.split('?')[1];
+        streamUrl += '?' + queryPart;
+      }
+    }
+
+    console.log("=== STREAM URL FINAL TENTADA ===", streamUrl);
+
+    if (streamUrl && streamUrl.startsWith('http')) {
+      console.log("[SUCCESS] Enviando stream válido:", streamUrl);
       return res.json({
         streams: [{
           name: "Stalker IPTV",
-          title: channelId,  // mostra o nome real
-          url: streamUrl
+          title: channelId,
+          url: streamUrl,
+          behaviorHints: {
+            notWebReady: false,
+            bingeWatcher: false
+          }
         }]
       });
+    } else {
+      console.log("[FALHA] Nenhum URL de stream válido encontrado");
+      return res.json({ streams: [] });
     }
 
-    res.json({ streams: [] });
-
   } catch (e) {
-    console.error("STREAM ERROR:", e.message, e.stack);
-    res.json({ streams: [] });
+    console.error("STREAM ERROR:", e.message);
+    console.error("STACK:", e.stack);
+    return res.json({ streams: [] });
   }
 });
 
