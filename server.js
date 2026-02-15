@@ -166,12 +166,21 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 
     const channels = channelsRes.data?.js?.data || []
 
-    const metas = channels.map(ch => ({
-      id: `stalker:${index}:${ch.id}`,
-      type: "tv",       // <<< Corrigido para "tv"
-      name: ch.name,
-      poster: ch.logo || null
-    }))
+    // Aqui está a mudança para debug:
+    const metas = [{
+      id: `stalker:${index}:TESTE_CANAL_123`,
+      type: "tv",
+      name: "Canal de Teste - Verificar Stream",
+      poster: null
+    }];
+
+    // Se quiseres manter os canais reais + o de teste, usa:
+    // const metas = channels.map(ch => ({
+    //   id: `stalker:${index}:TESTE_CANAL_123`,  // força fixo para debug
+    //   type: "tv",
+    //   name: ch.name || "Canal sem nome",
+    //   poster: ch.logo || null
+    // }));
 
     res.json({ metas })
   } catch (e) {
