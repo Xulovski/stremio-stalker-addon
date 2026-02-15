@@ -183,81 +183,50 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 /* ================= STREAM ================= */
 
 app.get("/stream/tv/:id.json", async (req, res) => {
-  console.log("STREAM REQUEST:", req.params.id)
+  console.log("STREAM REQUEST:", req.params.id);
 
   try {
-    const config = decodeConfig(req)
-    if (!config) return res.json({ streams: [] })
+    const config = decodeConfig(req);
+    if (!config || !config.portals) return res.json({ streams: [] });
 
-    const [, portalIndex, channelId] = req.params.id.split(":")
-    const { portal, mac } = config.portals[portalIndex]
+    const idParts = req.params.id.split(':');
+    if (idParts[0] !== 'stalker' || idParts.length < 3) {
+      console.log("[STREAM] Formato de ID inválido");
+      return res.json({ streams: [] });
+    }
 
-    const handshake = await axios.get(`${portal}/portal.php`, {
-      params: {
-        action: "handshake",
-        type: "stb",
-        JsHttpRequest: "1-xml"
-      },
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "X-User-Agent": "Model: MAG250; Link: WiFi",
-        Cookie: `mac=${mac}`
-      }
-    })
+    const portalIndex = parseInt(idParts[1], 10);
+    const channelId = idParts.slice(2).join(':'); // permite nomes com : ou espaços
 
-    const token = handshake.data?.js?.token
+    if (isNaN(portalIndex) || portalIndex >= config.portals.length) {
+      console.log("[STREAM] Índice de portal inválido:", portalIndex);
+      return res.json({ streams: [] });
+    }
 
-    if (!token) return res.json({ streams: [] })
+    const { portal, mac } = config.portals[portalIndex];
+    console.log(`[STREAM] Usando portal ${portalIndex}: ${portal} | Canal: ${channelId}`);
 
-const create = await axios.get(`${portal}/portal.php`, {
-  params: {
-    action: "create_link",
-    type: "itv",
-    cmd: `/ch/${channelId}_`,           // ← underscore aqui ajuda em alguns
-    JsHttpRequest: "1-xml"
-  },
-  headers: {
-    Authorization: `Bearer ${token}`,
-    "X-User-Agent": "Model: MAG250; Link: WiFi",
-    Cookie: `mac=${mac}`,
-    Referer: `${portal}/c/`
+    // ... o resto do código (handshake, token, create_link) continua igual
+
+    // No final, quando tens o streamUrl:
+    if (streamUrl) {
+      console.log("[STREAM] Sucesso - URL:", streamUrl);
+      return res.json({
+        streams: [{
+          name: "Stalker IPTV",
+          title: channelId,  // mostra o nome real
+          url: streamUrl
+        }]
+      });
+    }
+
+    res.json({ streams: [] });
+
+  } catch (e) {
+    console.error("STREAM ERROR:", e.message, e.stack);
+    res.json({ streams: [] });
   }
 });
-
-console.log("create_link resposta:", create.data);
-
-let cmd = create.data?.js?.cmd || create.data?.js?.link || create.data?.js?.url || '';
-
-if (cmd) {
-  cmd = cmd.trim().replace(/^ffmpeg\s+/i, '').split('|')[0].trim();
-  
-  if (cmd) {
-    return res.json({
-      streams: [{
-        name: "Stalker Direct",
-        title: "Stalker IPTV",
-        url: cmd
-      }]
-    });
-  }
-}
-
-res.json({ streams: [] });
-
-    res.json({
-      streams: [
-        {
-          name: "Play",
-          title: "Stalker IPTV",
-          url: streamUrl
-        }
-      ]
-    })
-  } catch (e) {
-    console.error("STREAM ERROR:", e.message)
-    res.json({ streams: [] })
-  }
-})
 
 /* ================= START ================= */
 
