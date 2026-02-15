@@ -209,23 +209,40 @@ app.get("/stream/tv/:id.json", async (req, res) => {
 
     if (!token) return res.json({ streams: [] })
 
-    const create = await axios.get(`${portal}/portal.php`, {
-      params: {
-        action: "create_link",
-        type: "itv",
-        cmd: `/ch/${channelId}`,
-        JsHttpRequest: "1-xml"
-      },
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-User-Agent": "Model: MAG250; Link: WiFi",
-        Cookie: `mac=${mac}`
-      }
-    })
+const create = await axios.get(`${portal}/portal.php`, {
+  params: {
+    action: "create_link",
+    type: "itv",
+    cmd: `/ch/${channelId}_`,           // ← underscore aqui ajuda em alguns
+    JsHttpRequest: "1-xml"
+  },
+  headers: {
+    Authorization: `Bearer ${token}`,
+    "X-User-Agent": "Model: MAG250; Link: WiFi",
+    Cookie: `mac=${mac}`,
+    Referer: `${portal}/c/`
+  }
+});
 
-    const streamUrl = create.data?.js?.cmd?.replace("ffmpeg ", "")
+console.log("create_link resposta:", create.data);
 
-    if (!streamUrl) return res.json({ streams: [] })
+let cmd = create.data?.js?.cmd || create.data?.js?.link || create.data?.js?.url || '';
+
+if (cmd) {
+  cmd = cmd.trim().replace(/^ffmpeg\s+/i, '').split('|')[0].trim();
+  
+  if (cmd) {
+    return res.json({
+      streams: [{
+        name: "Stalker Direct",
+        title: "Stalker IPTV",
+        url: cmd
+      }]
+    });
+  }
+}
+
+res.json({ streams: [] });
 
     res.json({
       streams: [
