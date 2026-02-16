@@ -174,7 +174,7 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 
     // Aqui está a mudança para debug:
     const metas = [{
-      id: `stalker:${index}:TESTE_CANAL_123`,
+      id: `channel:${index}:TESTE_CANAL_123`,
       type: "tv",
       name: "Canal de Teste - Verificar Stream",
       poster: null
