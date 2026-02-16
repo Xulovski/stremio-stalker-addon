@@ -101,18 +101,24 @@ app.post("/configure", (req, res) => {
 /* ================= MANIFEST ================= */
 
 app.get("/manifest.json", (req, res) => {
-  const config = decodeConfig(req)
+  const config = decodeConfig(req);
 
   res.json({
     id: ADDON_ID,
     version: "1.0.0",
     name: ADDON_NAME,
     description: "Addon Stalker IPTV com múltiplos portais",
-    types: ["tv"],                 // <<< Corrigido para "tv"
-    resources: ["catalog", "stream"],
+    types: ["tv"],
+    resources: [
+      "catalog",
+      {
+        name: "stream",
+        types: ["tv"]
+      }
+    ],
     catalogs: config
       ? config.portals.map((_, i) => ({
-          type: "tv",             // <<< Corrigido para "tv"
+          type: "tv",
           id: `stalker_${i}`,
           name: `Servidor ${i + 1}`
         }))
@@ -121,8 +127,8 @@ app.get("/manifest.json", (req, res) => {
       configurable: true,
       configurationRequired: !config
     }
-  })
-})
+  });
+});
 
 /* ================= CATALOG ================= */
 
