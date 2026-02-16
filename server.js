@@ -103,19 +103,12 @@ app.post("/configure", (req, res) => {
 app.get("/manifest.json", (req, res) => {
   const config = decodeConfig(req);
 
-  res.json({
+  const manifest = {
     id: ADDON_ID,
-    version: "1.0.0",
+    version: "1.0.1",  // incrementa para forçar refresh no Stremio
     name: ADDON_NAME,
-    description: "Addon Stalker IPTV com múltiplos portais",
+    description: "Addon Stalker IPTV com múltiplos portais - Debug Stream",
     types: ["tv"],
-    resources: [
-      "catalog",
-      {
-        name: "stream",
-        types: ["tv"]
-      }
-    ],
     catalogs: config
       ? config.portals.map((_, i) => ({
           type: "tv",
@@ -123,11 +116,23 @@ app.get("/manifest.json", (req, res) => {
           name: `Servidor ${i + 1}`
         }))
       : [],
+    resources: [
+      "catalog",
+      {
+        name: "stream",
+        types: ["tv"],
+        idPrefixes: ["stalker:"]  // ← chave: força Stremio a chamar /stream para IDs que começam com "stalker:"
+      }
+    ],
+    idPrefixes: ["stalker:"],  // global, ajuda em algumas plataformas
     behaviorHints: {
       configurable: true,
-      configurationRequired: !config
+      configurationRequired: !config,
+      adult: false  // opcional, mas alguns addons tv precisam
     }
-  });
+  };
+
+  res.json(manifest);
 });
 
 /* ================= CATALOG ================= */
@@ -174,10 +179,11 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 
     // Aqui está a mudança para debug:
     const metas = [{
-      id: `channel:${index}:TESTE_CANAL_123`,
+      id: "stalker:0:debug_teste_stream",  // sem ${index} se quiseres simplificar ainda mais
       type: "tv",
-      name: "Canal de Teste - Verificar Stream",
-      poster: null
+      name: "** DEBUG TESTE STREAM - Clique aqui **",
+      description: "Teste para ver se /stream é chamado (logs no Render)"
+}];
     }];
 
     // Se quiseres manter os canais reais + o de teste, usa:
