@@ -28,7 +28,7 @@ function decodeConfig(req) {
 }
 
 function normalizePortal(url) {
-  return url.trim().replace(/\/+$/, "").replace(/\/c$/, "")
+  return url.trim().replace(/\/+\( /, "").replace(/\/c \)/, "")
 }
 
 /* ================= CONFIG PAGE ================= */
@@ -41,6 +41,8 @@ app.get("/configure", (req, res) => {
     <form method="POST">
       <div id="list">
         <div>
+          Nome da Lista:<br>
+          <input name="name[]" required><br>
           Portal URL:<br>
           <input name="portal[]" required><br>
           MAC Address:<br>
@@ -56,6 +58,8 @@ app.get("/configure", (req, res) => {
         const div = document.createElement("div")
         div.innerHTML = \`
           <hr>
+          Nome da Lista:<br>
+          <input name="name[]" required><br>
           Portal URL:<br>
           <input name="portal[]" required><br>
           MAC Address:<br>
@@ -79,10 +83,15 @@ app.post("/configure", (req, res) => {
       ? req.body.mac
       : [req.body.mac]
 
+    const names = Array.isArray(req.body.name)
+      ? req.body.name
+      : [req.body.name]
+
     const config = {
       portals: portals.map((p, i) => ({
         portal: normalizePortal(p),
-        mac: macs[i]
+        mac: macs[i],
+        name: names[i] || `Servidor ${i + 1}`
       }))
     }
 
@@ -91,7 +100,7 @@ app.post("/configure", (req, res) => {
     ).toString("base64")
 
     res.redirect(
-      `stremio://${req.headers.host}/manifest.json?config=${encoded}`
+      `stremio://\( {req.headers.host}/manifest.json?config= \){encoded}`
     )
   } catch (err) {
     res.status(500).send("Erro ao salvar configuração")
@@ -105,15 +114,15 @@ app.get("/manifest.json", (req, res) => {
 
   const manifest = {
     id: ADDON_ID,
-    version: "1.0.1",  // incrementa para forçar refresh no Stremio
+    version: "1.0.1",
     name: ADDON_NAME,
     description: "Addon Stalker IPTV com múltiplos portais - Debug Stream",
     types: ["tv"],
     catalogs: config
-      ? config.portals.map((_, i) => ({
+      ? config.portals.map((p, i) => ({
           type: "tv",
           id: `stalker_${i}`,
-          name: `Servidor ${i + 1}`
+          name: p.name || `Servidor ${i + 1}`
         }))
       : [],
     resources: [
@@ -121,14 +130,14 @@ app.get("/manifest.json", (req, res) => {
       {
         name: "stream",
         types: ["tv"],
-        idPrefixes: ["stalker:"]  // ← chave: força Stremio a chamar /stream para IDs que começam com "stalker:"
+        idPrefixes: ["stalker:"]
       }
     ],
-    idPrefixes: ["stalker:"],  // global, ajuda em algumas plataformas
+    idPrefixes: ["stalker:"],
     behaviorHints: {
       configurable: true,
       configurationRequired: !config,
-      adult: false  // opcional, mas alguns addons tv precisam
+      adult: false
     }
   };
 
@@ -177,22 +186,12 @@ app.get("/catalog/tv/:id.json", async (req, res) => {
 
     const channels = channelsRes.data?.js?.data || []
 
-    // Aqui está a mudança para debug:
-    const metas = [{
-      id: "stalker:0:debug_teste_stream",  // sem ${index} se quiseres simplificar ainda mais
+    const metas = channels.map(ch => ({
+      id: `stalker:\( {index}: \){ch.id}`,
       type: "tv",
-      name: "** DEBUG TESTE STREAM - Clique aqui **",
-      description: "Teste para ver se /stream é chamado (logs no Render)"
-}];
-    }];
-
-    // Se quiseres manter os canais reais + o de teste, usa:
-    // const metas = channels.map(ch => ({
-    //   id: `stalker:${index}:TESTE_CANAL_123`,  // força fixo para debug
-    //   type: "tv",
-    //   name: ch.name || "Canal sem nome",
-    //   poster: ch.logo || null
-    // }));
+      name: ch.name,
+      poster: ch.logo || null
+    }))
 
     res.json({ metas })
   } catch (e) {
@@ -277,6 +276,7 @@ app.get("/stream/tv/:id.json", async (req, res) => {
     // Logs completos para debug
     console.log("=== CREATE_LINK REQUEST ===");
     console.log(`URL: \( {portal}/portal.php?action=create_link&type=itv&cmd=/ch/ \){channelId}_`);
+    console.log("Params:", { action: "create_link", type: "itv", cmd: `/ch/${channelId}_` });
     console.log("=== CREATE_LINK RESPONSE STATUS ===", create.status);
     console.log("=== CREATE_LINK FULL DATA ===", JSON.stringify(create.data, null, 2));
 
