@@ -276,7 +276,7 @@ app.get("/stream/tv/:id.json", async (req, res) => {
 
     // Logs completos para debug
     console.log("=== CREATE_LINK REQUEST ===");
-    console.log("URL:", `\( {portal}/portal.php?action=create_link&type=itv&cmd=/ch/ \){channelId}_`);
+    console.log(`URL: \( {portal}/portal.php?action=create_link&type=itv&cmd=/ch/ \){channelId}_`);
     console.log("=== CREATE_LINK RESPONSE STATUS ===", create.status);
     console.log("=== CREATE_LINK FULL DATA ===", JSON.stringify(create.data, null, 2));
 
